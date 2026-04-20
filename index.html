@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Relatório de Viagens - Exportação Total</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    
+    <style>
+        body { background-color: #f4f7f6; padding: 20px; font-family: 'Segoe UI', sans-serif; }
+        .container-card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        h2 { color: #2c3e50; font-weight: 600; text-align: center; }
+        .file-section { background: #f8f9fa; border: 2px dashed #0d6efd; padding: 20px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
+        .btn-excel { background-color: #1d6f42; color: white; margin-bottom: 15px; font-weight: 500; border: none; padding: 10px 20px; border-radius: 5px; }
+        .btn-excel:hover { background-color: #155231; color: white; }
+        .badge-custom { background-color: #e7f1ff; color: #0d6efd; padding: 5px 15px; border-radius: 20px; font-size: 0.85em; margin: 2px; }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid container-card">
+    <h2>📊 Relatório de Viagens</h2>
+    <div class="text-center mb-3">
+        <span class="badge-custom">Filtro: Distância ≥ 2,50 km</span>
+        <span class="badge-custom">Exportação: Todos os dados filtrados</span>
+    </div>
+    
+    <div class="file-section">
+        <input class="form-control" type="file" id="csvFile" accept=".csv">
+    </div>
+
+    <div id="tableContainer" style="display:none;">
+        <div class="d-flex justify-content-end">
+            <button id="btnExport" class="btn btn-excel">📗 Baixar Todas as Páginas em Excel</button>
+        </div>
+        <table id="tripTable" class="table table-hover table-bordered w-100">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Frota</th>
+                    <th>Local</th>
+                    <th>Motorista</th>
+                    <th>Início</th>
+                    <th>Fim</th>
+                    <th>Tempo Dirigindo</th>
+                    <th>Tempo Parado</th>
+                    <th>Duração Total</th>
+                    <th>Distância (km)</th>
+                    <th>Média</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+<script>
+    const colunasDesejadas = [
+        "Date", "FleetNumber", "SiteName2", "OriginalDriverName", 
+        "ActivityStartDateTime", "ActivityEndDateTime", "TotalDrivingTime", 
+        "TotalStandingTime", "TotalDuration", "TotalDistanceTravelled", "FuelConsumptionMeasured"
+    ];
+
+    let dadosParaExportar = []; // Variável global para armazenar os dados filtrados
+
+    function converterParaNumero(valor) {
+        if (!valor) return 0;
+        let limpando = valor.toString().replace(/\./g, '').replace(',', '.');
+        return parseFloat(limpando) || 0;
+    }
+
+    function extrairApenasHora(dataHoraStr) {
+        if (!dataHoraStr) return '-';
+        const partes = dataHoraStr.trim().split(' ');
+        return partes.length > 1 ? partes[1] : partes[0];
+    }
+
+    document.getElementById('csvFile').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                processarDados(results.data);
+            }
+        });
+    });
+
+    function processarDados(data) {
+        const tableBody = document.getElementById('tableBody');
+        tableBody.innerHTML = '';
+        dadosParaExportar = []; // Limpa exportação anterior
+
+        data.forEach(row => {
+            const distancia = converterParaNumero(row["TotalDistanceTravelled"]);
+
+            if (distancia >= 1.00) {
+                let rowData = {};
+                let tr = document.createElement('tr');
+                
+                colunasDesejadas.forEach(col => {
+                    let valorOriginal = row[col] || '-';
+                    let valorTratado = (col === "ActivityEndDateTime") ? extrairApenasHora(valorOriginal) : valorOriginal;
+                    
+                    // Adiciona na tabela HTML
+                    let td = document.createElement('td');
+                    td.textContent = valorTratado;
+                    tr.appendChild(td);
+
+                    // Adiciona no objeto de exportação com nome amigável
+                    const nomesColunas = {
+                        "Date": "Data", "FleetNumber": "Frota", "SiteName2": "Local",
+                        "OriginalDriverName": "Motorista", "ActivityStartDateTime": "Início",
+                        "ActivityEndDateTime": "Fim (Hora)", "TotalDrivingTime": "Tempo Dirigindo",
+                        "TotalStandingTime": "Tempo Parado", "TotalDuration": "Duração Total",
+                        "TotalDistanceTravelled": "Distância (km)", "FuelConsumptionMeasured": "Consumo (L/100km)"
+                    };
+                    rowData[nomesColunas[col]] = valorTratado;
+                });
+                
+                tableBody.appendChild(tr);
+                dadosParaExportar.push(rowData);
+            }
+        });
+
+        document.getElementById('tableContainer').style.display = 'block';
+        if ($.fn.DataTable.isDataTable('#tripTable')) {
+            $('#tripTable').DataTable().destroy();
+        }
+
+        $('#tripTable').DataTable({
+            language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json' },
+            order: [[0, 'desc']],
+            pageLength: 25,
+            scrollX: true
+        });
+    }
+
+    // NOVA FUNÇÃO DE EXPORTAÇÃO (PEGA TUDO)
+    document.getElementById('btnExport').addEventListener('click', function() {
+        if (dadosParaExportar.length === 0) {
+            alert("Não há dados para exportar.");
+            return;
+        }
+
+        // Cria a planilha a partir do array de objetos (que contém todas as linhas filtradas)
+        const ws = XLSX.utils.json_to_sheet(dadosParaExportar);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Relatório Completo");
+        
+        XLSX.writeFile(wb, "Relatorio_Viagens_Completo.xlsx");
+    });
+</script>
+
+</body>
+</html>
