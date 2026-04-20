@@ -3,143 +3,164 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Identificação de Motoristas</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/dataTables.bootstrap5.min.css">
+    <title>Relatório de Viagens - Exportação Total</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+    
     <style>
-        body { background-color: #f4f7f6; padding: 20px; }
-        .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0,0,0,0.1); }
-        .col-identificada { background-color: #fff9c4 !important; min-width: 200px; }
-        .input-motorista { border: 1px solid #ffa000; border-radius: 4px; padding: 5px; width: 100%; }
-        table thead { background-color: #343a40; color: white; }
-        .saved-row { opacity: 0.5; background-color: #d4edda !important; transition: all 0.5s ease; }
+        body { background-color: #f4f7f6; padding: 20px; font-family: 'Segoe UI', sans-serif; }
+        .container-card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        h2 { color: #2c3e50; font-weight: 600; text-align: center; }
+        .file-section { background: #f8f9fa; border: 2px dashed #0d6efd; padding: 20px; border-radius: 10px; margin-bottom: 20px; text-align: center; }
+        .btn-excel { background-color: #1d6f42; color: white; margin-bottom: 15px; font-weight: 500; border: none; padding: 10px 20px; border-radius: 5px; }
+        .btn-excel:hover { background-color: #155231; color: white; }
+        .badge-custom { background-color: #e7f1ff; color: #0d6efd; padding: 5px 15px; border-radius: 20px; font-size: 0.85em; margin: 2px; }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <div class="header-section text-center mb-4">
-        <h2>Filtro de Motoristas Desconhecidos</h2>
-        <p id="status-text" class="text-muted">Carregando base de dados...</p>
+<div class="container-fluid container-card">
+    <h2>📊 Relatório de Viagens</h2>
+    <div class="text-center mb-3">
+        <span class="badge-custom">Filtro: Distância ≥ 2,50 km</span>
+        <span class="badge-custom">Exportação: Todos os dados filtrados</span>
+    </div>
+    
+    <div class="file-section">
+        <input class="form-control" type="file" id="csvFile" accept=".csv">
     </div>
 
-    <div id="tabela-container" style="display: none;">
-        <table id="dadosTabela" class="table table-sm table-hover table-bordered w-100">
-            <thead><tr id="tableHeader"></tr></thead>
+    <div id="tableContainer" style="display:none;">
+        <div class="d-flex justify-content-end">
+            <button id="btnExport" class="btn btn-excel">📗 Baixar Todas as Páginas em Excel</button>
+        </div>
+        <table id="tripTable" class="table table-hover table-bordered w-100">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Frota</th>
+                    <th>Local</th>
+                    <th>Motorista</th>
+                    <th>Início</th>
+                    <th>Fim</th>
+                    <th>Tempo Dirigindo</th>
+                    <th>Tempo Parado</th>
+                    <th>Duração Total</th>
+                    <th>Distância (km)</th>
+                    <th>Média</th>
+                </tr>
+            </thead>
             <tbody id="tableBody"></tbody>
         </table>
     </div>
 </div>
 
-<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.4/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
 <script>
-$(document).ready(function() {
-    // URL do seu CSV publicado
-    const CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vS4075sYsvoz_4YZmDnxQRUoVWE86-yamQ4UkCtyYz3ZEJM3qoTdmr1q4IW4ARKCw8rJ1HQMAvNyinA/pub?gid=0&single=true&output=csv';
-    // URL do seu Web App (Após publicar o script acima)
-    const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbw_GJ5h83wRmHxyys-PSgjyNzBZyAb0jJiLJwqPuJx-AxOjzucxt0Nsr3g8JGhal7lPzw/exec'; 
+    const colunasDesejadas = [
+        "Date", "FleetNumber", "SiteName2", "OriginalDriverName", 
+        "ActivityStartDateTime", "ActivityEndDateTime", "TotalDrivingTime", 
+        "TotalStandingTime", "TotalDuration", "TotalDistanceTravelled", "FuelConsumptionMeasured"
+    ];
 
-    let table;
+    let dadosParaExportar = []; // Variável global para armazenar os dados filtrados
 
-    Papa.parse(CSV_URL, {
-        download: true,
-        header: true,
-        skipEmptyLines: true,
-        complete: function(results) {
-            let data = results.data;
-            let columns = results.meta.fields;
+    function converterParaNumero(valor) {
+        if (!valor) return 0;
+        let limpando = valor.toString().replace(/\./g, '').replace(',', '.');
+        return parseFloat(limpando) || 0;
+    }
 
-            const colIdentificado = "Motorista Identificado";
-            const colAcao = "Ação";
-            
-            let headerHtml = `<th>${colIdentificado}</th>`;
-            columns.forEach(col => { headerHtml += `<th>${col}</th>`; });
-            headerHtml += `<th>${colAcao}</th>`;
-            $('#tableHeader').html(headerHtml);
+    function extrairApenasHora(dataHoraStr) {
+        if (!dataHoraStr) return '-';
+        const partes = dataHoraStr.trim().split(' ');
+        return partes.length > 1 ? partes[1] : partes[0];
+    }
 
-            data.forEach((row, idx) => {
-                let htmlRow = `<tr>`;
-                htmlRow += `<td class="col-identificada"><input type="text" class="input-motorista" placeholder="Nome do motorista..."></td>`;
-                columns.forEach(col => {
-                    htmlRow += `<td>${row[col] || ''}</td>`;
-                });
-                htmlRow += `<td><button class="btn btn-primary btn-sm btn-save">Salvar</button></td>`;
-                htmlRow += `</tr>`;
-                $('#tableBody').append(htmlRow);
-            });
+    document.getElementById('csvFile').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (!file) return;
 
-            $('#status-text').text("Mostrando apenas registros Unknown e Unmatched");
-            $('#tabela-container').show();
-
-            table = $('#dadosTabela').DataTable({
-                language: { url: '//cdn.datatables.net/plug-ins/1.13.4/i18n/pt-BR.json' },
-                pageLength: 25,
-                initComplete: function() {
-                    let columnIndex = -1;
-                    $('#tableHeader th').each(function(i) {
-                        if ($(this).text() === "Motorista") columnIndex = i;
-                    });
-
-                    if(columnIndex !== -1) {
-                        // Filtra para exibir APENAS o que precisa ser identificado
-                        this.api().column(columnIndex).search('Unmatched|Unknown', true, false).draw();
-                    }
-                }
-            });
-        }
+        Papa.parse(file, {
+            header: true,
+            skipEmptyLines: true,
+            complete: function(results) {
+                processarDados(results.data);
+            }
+        });
     });
 
-    $('#tableBody').on('click', '.btn-save', function() {
-        const rowBtn = $(this);
-        const rowElement = rowBtn.closest('tr');
-        const novoNome = rowElement.find('.input-motorista').val();
+    function processarDados(data) {
+        const tableBody = document.getElementById('tableBody');
+        tableBody.innerHTML = '';
+        dadosParaExportar = []; // Limpa exportação anterior
 
-        if (!novoNome) {
-            alert("Digite um nome antes de salvar!");
-            return;
-        }
+        data.forEach(row => {
+            const distancia = converterParaNumero(row["TotalDistanceTravelled"]);
 
-        rowBtn.prop('disabled', true).text('⏳');
+            if (distancia >= 2.50) {
+                let rowData = {};
+                let tr = document.createElement('tr');
+                
+                colunasDesejadas.forEach(col => {
+                    let valorOriginal = row[col] || '-';
+                    let valorTratado = (col === "ActivityEndDateTime") ? extrairApenasHora(valorOriginal) : valorOriginal;
+                    
+                    // Adiciona na tabela HTML
+                    let td = document.createElement('td');
+                    td.textContent = valorTratado;
+                    tr.appendChild(td);
 
-        let dadosLinha = {};
-        const cabecalhos = [];
-        $('#tableHeader th').each(function() { cabecalhos.push($(this).text()); });
-
-        rowElement.find('td').each(function(i) {
-            let titulo = cabecalhos[i];
-            if (titulo === "Motorista Identificado") {
-                dadosLinha[titulo] = novoNome;
-            } else if (titulo !== "Ação") {
-                dadosLinha[titulo] = $(this).text();
+                    // Adiciona no objeto de exportação com nome amigável
+                    const nomesColunas = {
+                        "Date": "Data", "FleetNumber": "Frota", "SiteName2": "Local",
+                        "OriginalDriverName": "Motorista", "ActivityStartDateTime": "Início",
+                        "ActivityEndDateTime": "Fim (Hora)", "TotalDrivingTime": "Tempo Dirigindo",
+                        "TotalStandingTime": "Tempo Parado", "TotalDuration": "Duração Total",
+                        "TotalDistanceTravelled": "Distância (km)", "FuelConsumptionMeasured": "Consumo (L/100km)"
+                    };
+                    rowData[nomesColunas[col]] = valorTratado;
+                });
+                
+                tableBody.appendChild(tr);
+                dadosParaExportar.push(rowData);
             }
         });
 
-        fetch(SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            body: JSON.stringify(dadosLinha)
-        })
-        .then(() => {
-            // Feedback visual de sucesso
-            rowBtn.text('✅').removeClass('btn-primary').addClass('btn-success');
-            rowElement.addClass('saved-row');
-            rowElement.find('input').prop('disabled', true);
+        document.getElementById('tableContainer').style.display = 'block';
+        if ($.fn.DataTable.isDataTable('#tripTable')) {
+            $('#tripTable').DataTable().destroy();
+        }
 
-            // REMOVE A LINHA DA TABELA APÓS 1 SEGUNDO
-            setTimeout(() => {
-                table.row(rowElement).remove().draw(false);
-            }, 1000);
-        })
-        .catch(() => {
-            alert("Erro ao salvar");
-            rowBtn.prop('disabled', false).text('Salvar');
+        $('#tripTable').DataTable({
+            language: { url: '//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json' },
+            order: [[0, 'desc']],
+            pageLength: 25,
+            scrollX: true
         });
+    }
+
+    // NOVA FUNÇÃO DE EXPORTAÇÃO (PEGA TUDO)
+    document.getElementById('btnExport').addEventListener('click', function() {
+        if (dadosParaExportar.length === 0) {
+            alert("Não há dados para exportar.");
+            return;
+        }
+
+        // Cria a planilha a partir do array de objetos (que contém todas as linhas filtradas)
+        const ws = XLSX.utils.json_to_sheet(dadosParaExportar);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Relatório Completo");
+        
+        XLSX.writeFile(wb, "Relatorio_Viagens_Completo.xlsx");
     });
-});
 </script>
+
 </body>
 </html>
